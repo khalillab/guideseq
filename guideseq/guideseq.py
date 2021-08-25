@@ -4,6 +4,9 @@
 
 guideseq.py
 ===========
+
+V2
+
 serves as the wrapper for all guideseq pipeline
 
 """
