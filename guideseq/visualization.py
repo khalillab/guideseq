@@ -24,8 +24,8 @@ def parseSitesFile(infile):
 		for line in f:
 			line = line.rstrip('\n')
 			line_items = line.split('\t')
-			# print (line_items)
-			offtarget_reads = line_items[11]
+			offtarget_reads = int(line_items[11].strip())
+			control_primer = float(line_items[-3].strip())
 			no_bulge_offtarget_sequence = line_items[24]
 			bulge_offtarget_sequence = line_items[29]
 			target_seq = line_items[40]
@@ -38,11 +38,12 @@ def parseSitesFile(infile):
 					total_seq += 1
 				offtargets.append({'seq': no_bulge_offtarget_sequence.strip(),
 								   'bulged_seq': bulge_offtarget_sequence.strip(),
-								   'reads': int(offtarget_reads.strip()),
+								   'reads': "%s,%s"%(offtarget_reads,float(offtarget_reads/control_primer)),
 								   'target_seq': target_seq.strip(),
 								   'realigned_target_seq': realigned_target_seq.strip()
 								   })
-	offtargets = sorted(offtargets, key=lambda x: x['reads'], reverse=True)
+	# offtargets = sorted(offtargets, key=lambda x: x['reads'], reverse=True)
+	offtargets = sorted(offtargets, key=lambda x: int(x['reads'].split(",")[0]), reverse=True)
 	return offtargets, target_seq, total_seq
 
 # 3/6/2020
@@ -68,7 +69,7 @@ def visualizeOfftargets(infile, outfile, title,PAM):
 
 	# Get offtargets array from file
 	offtargets, target_seq, total_seq = parseSitesFile(infile)
-
+	print (target_seq)
 	# Initiate canvas
 	dwg = svgwrite.Drawing(outfile + '.svg', profile='full', size=(u'100%', 100 + total_seq*(box_size + 1)))
 
@@ -122,7 +123,7 @@ def visualizeOfftargets(infile, outfile, title,PAM):
 			dwg.add(dwg.rect((x, y), (box_size, box_size), fill="#B3B3B3"))
 		dwg.add(dwg.text(c, insert=(x + 3, y + box_size - 3), fill='black', style="font-size:15px; font-family:Courier"))
 
-	dwg.add(dwg.text('Reads', insert=(x_offset + box_size * len(target_seq) + 16, y_offset + box_size - 3), style="font-size:15px; font-family:Courier"))
+	dwg.add(dwg.text('Reads,Ratio', insert=(x_offset + box_size * len(target_seq) + 16, y_offset + box_size - 3), style="font-size:15px; font-family:Courier"))
 
 	# Draw aligned sequence rows
 	y_offset += 1  # leave some extra space after the reference row
@@ -212,7 +213,7 @@ def main():
 			PAM="NGG"
 		visualizeOfftargets(sys.argv[1], sys.argv[2], title=title,PAM=PAM)
 	else:
-		print('Usage: python visualization.py INFILE OUTFILE [TITLE] [PAM]')
+		print('Usage: python visualization.py INFILE OUTFILE [TITLE]')
 
 if __name__ == '__main__':
 	main()

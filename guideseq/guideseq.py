@@ -229,6 +229,7 @@ class GuideSeq:
                 annotations = {}
                 annotations['Description'] = sample_data['description']
                 annotations['Targetsite'] = sample
+                print ("Using control primer",sample_data['control_primer'])
 
                 if sample is 'control':
                     annotations['Sequence'] = ''
@@ -240,7 +241,7 @@ class GuideSeq:
                 self.identified[sample] = os.path.join(self.output_folder, 'identified', sample + '_identifiedOfftargets.txt')
 
                 identifyOfftargetSites.analyze(samfile, self.reference_genome, self.identified[sample], annotations,
-                                               self.window_size, self.max_score)
+                                               self.window_size, self.max_score, sample_data['control_primer'])
 
             logger.info('Finished identifying offtarget sites.')
 

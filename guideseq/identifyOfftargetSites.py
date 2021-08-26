@@ -131,7 +131,10 @@ class chromosomePosition():
 			primer_geometric_mean = (primer1 * primer2) ** 0.5
 			most_frequent_chromosome = sorted_list[-1][0]
 			most_frequent_position = sorted_list[-1][1]
-			BED_format_chromosome = "chr" + most_frequent_chromosome
+			if "chr" in most_frequent_chromosome:
+				BED_format_chromosome = most_frequent_chromosome
+			else:
+				BED_format_chromosome = "chr" + most_frequent_chromosome
 			BED_name = BED_format_chromosome + "_" + str(most_frequent_position) + "_" + str(barcode_sum)
 			offtarget_sequence = self.getSequence(self.genome, most_frequent_chromosome, most_frequent_position - windowsize, most_frequent_position + windowsize)
 
@@ -285,11 +288,15 @@ def alignSequences(targetsite_sequence, window_sequence, max_score=7):
 	return [offtarget_sequence_no_bulge, mismatches, chosen_alignment_strand_m, start_no_bulge, end_no_bulge,
 			bulged_offtarget_sequence, length, score, substitutions, insertions, deletions, chosen_alignment_strand_b, bulged_start, bulged_end, realigned_target]
 
+def hamming_distance(s1, s2):
+    if len(s1) != len(s2):
+        raise ValueError("Strand lengths are not equal!")
+    return sum(ch1 != ch2 for ch1,ch2 in zip(s1,s2))
 
 """
 annotation is in the format:
 """
-def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, max_score):
+def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, max_score, control_primer):
 
 	output_folder = os.path.dirname(outfile)
 	if not os.path.exists(output_folder):
@@ -299,6 +306,11 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 	file = open(sam_filename, 'rU')
 	__, filename_tail = os.path.split(sam_filename)
 	chromosome_position = chromosomePosition(reference_genome)
+	# control_primer_obj = chromosomePosition(reference_genome)
+	control_primer_count = 0
+	total_dsODN = 0
+	control_primer_count_dict = {} # for debug purposes
+	total_dsODN_count_dict = {} # for debug purposes
 	for line in file:
 		fields = line.split('\t')
 		if len(fields) >= 10:
@@ -307,7 +319,25 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 			if int(mapq) >= 50 and int(sam_flag) & 128 and not int(sam_flag) & 2048:
 				# Second read in pair
 				barcode, count = parseReadName(full_read_name)
+				# print (read_sequence)
+				control_read = contain_control_primer(read_sequence, sam_flag, control_primer)
+				# print (control_read)
+				if control_read in control_primer_count_dict:
+					control_primer_count_dict[control_read] += 1
+				else:
+					control_primer_count_dict[control_read] = 1
+				if control_read != "nomatch":
+					control_primer_count += 1
+					
+				# todo, check barcode count
 				primer = assignPrimerstoReads(read_sequence, sam_flag)
+				if primer in total_dsODN_count_dict:
+					total_dsODN_count_dict[primer] += 1
+				else:
+					total_dsODN_count_dict[primer] = 1
+				# print (primer)
+				if primer != "nomatch":
+					total_dsODN += 1
 				if int(template_length) < 0:  # Reverse read
 					read_position = int(position_of_mate) + abs(int(template_length)) - 1
 					strand = "-"
@@ -332,7 +362,7 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 			  'Site_GapsAllowed.Sequence', 'Site_GapsAllowed.Length', 'Site_GapsAllowed.Score',  # 29:31
 			  'Site_GapsAllowed.Substitutions', 'Site_GapsAllowed.Insertions', 'Site_GapsAllowed.Deletions',  # 32:34
 			  'Site_GapsAllowed.Strand', 'Site_GapsAllowed.Start', 'Site_GapsAllowed.End',  # 35:37
-			  'Cell', 'Targetsite', 'TargetSequence', 'RealignedTargetSequence', sep='\t', file=f)  # 38:41
+			  'Cell', 'Targetsite', 'TargetSequence', 'RealignedTargetSequence','control_reads','total_dsODN',"normlization_ratio", sep='\t', file=f)  # 38:41
 
 		# Output summary of each window
 		summary = chromosome_position.SummarizeBarcodeIndex(windowsize)
@@ -376,7 +406,7 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 				# print ("BED_name",BED_name)
 				# print ("annotation",annotation)
 				output_row = row[4:8] + [filename_tail] + row[0:4] + row[8:] + \
-							 [str(BED_name), BED_score, BED_chromosome,
+							 [str(x) for x in BED_name, BED_score, BED_chromosome,
 											  offtarget_sequence_no_bulge, mismatches, chosen_alignment_strand_m,
 											  non_bulged_target_start_absolute, non_bulged_target_end_absolute,
 											  bulged_offtarget_sequence, length, distance, substitutions, insertions, deletions,
@@ -401,7 +431,7 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 				output_dict[output_row_key] = output_row
 
 		for key in sorted(output_dict.keys()):
-			print(*output_dict[key], sep='\t', file=f)
+			print(*output_dict[key]+[str(control_primer_count),str(total_dsODN),str(output_dict[key][11]/float(control_primer_count))], sep='\t', file=f)
 
 def py2min(myList):
 	out = [i  for i in myList if i != "" ]
@@ -414,16 +444,31 @@ def py2max(myList):
 def assignPrimerstoReads(read_sequence, sam_flag):
 	# Get 20-nucleotide sequence from beginning or end of sequence depending on orientation
 	if int(sam_flag) & 16:
-		readstart = reverseComplement(read_sequence[-20:])
+		readstart = read_sequence[-20:]
 	else:
 		readstart = read_sequence[:20]
-	if readstart == "TTGAGTTGTCATATGTTAAT":
+	if readstart == "GTTTAATTGAGTTGTCATAT":
 		return "primer1"
-	elif readstart == "ACATATGACAACTCAATTAA":
+	elif readstart == "ATATGACAACTCAATTAAAC":
 		return "primer2"
 	else:
 		return "nomatch"
 
+
+def contain_control_primer(read_sequence, sam_flag, control_primer):
+	# Get 20-nucleotide sequence from beginning or end of sequence depending on orientation
+	if control_primer == None:
+		return "nomatch"
+	if int(sam_flag) & 16:
+		# print (read_sequence[-len(control_primer):])
+		if hamming_distance(read_sequence[-len(control_primer):],control_primer)<=2:
+			return "control_rev"
+	else:
+		# print (read_sequence[:len(control_primer)])
+		if hamming_distance(read_sequence[:len(control_primer)],control_primer)<=2:
+			return "control_fwd"
+
+	return "nomatch"
 
 def loadFileIntoArray(filename):
 	with open(filename, 'rU') as f:
@@ -467,6 +512,7 @@ def main():
 	parser.add_argument('--samfile', help='SAM file', nargs='*')
 	parser.add_argument('--outfile', help='File to output identified sites to.', required=True)
 	parser.add_argument('--window', help='Window around breakpoint to search for off-target', type=int, default=25)
+	parser.add_argument('--control_primer', help='control_primer forward sequence', type=str, default=None)
 	parser.add_argument('--max_score', help='Score threshold', type=int, default=7)
 	# parser.add_argument('--demo')
 	parser.add_argument('--target', default='')
@@ -474,8 +520,7 @@ def main():
 	args = parser.parse_args()
 
 	annotations = {'Description': 'test description', 'Targetsite': 'dummy targetsite', 'Sequence': args.target}
-	analyze(args.samfile[0], args.ref, args.outfile, annotations, args.window, args.max_score)
-
+	analyze(args.samfile[0], args.ref, args.outfile, annotations, args.window, args.max_score,args.control_primer)
 
 if __name__ == "__main__":
 	main()

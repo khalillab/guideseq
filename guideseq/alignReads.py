@@ -50,5 +50,6 @@ def alignReads(BWA_path, HG19_path, read1, read2, outfile):
     # Open the outfile and redirect the output of the alignment to it.
     with open(outfile, 'w') as f:
         subprocess.call(bwa_alignment_command.split(), stdout=f)
+    os.system("samtools view -bS {0}/{1}.sam > {0}/{1}.bam;samtools sort -o {0}/{1}.st.bam {0}/{1}.bam;samtools index {0}/{1}.st.bam".format(output_folder,sample_name))
 
     logger.info('Paired end mapping for {0} completed.'.format(sample_name))
