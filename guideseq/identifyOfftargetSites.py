@@ -16,6 +16,7 @@ import pyfaidx
 import re
 import regex
 import logging
+from Levenshtein import distance
 
 logger = logging.getLogger('root')
 
@@ -40,21 +41,29 @@ class chromosomePosition():
 			self.chromosome_barcode_dict[chromosome][position]['+_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['+primer1_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['+primer2_total'] = 0
+			self.chromosome_barcode_dict[chromosome][position]['+primer1_mispriming_total'] = 0
+			self.chromosome_barcode_dict[chromosome][position]['+primer2_mispriming_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['+nomatch_total'] = 0
 
 			self.chromosome_barcode_dict[chromosome][position]['-_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['-primer1_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['-primer2_total'] = 0
+			self.chromosome_barcode_dict[chromosome][position]['-primer1_mispriming_total'] = 0
+			self.chromosome_barcode_dict[chromosome][position]['-primer2_mispriming_total'] = 0
 			self.chromosome_barcode_dict[chromosome][position]['-nomatch_total'] = 0
 
 			self.chromosome_barcode_dict[chromosome][position]['+'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['+primer1'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['+primer2'] = collections.Counter()
+			self.chromosome_barcode_dict[chromosome][position]['+primer1_mispriming'] = collections.Counter()
+			self.chromosome_barcode_dict[chromosome][position]['+primer2_mispriming'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['+nomatch'] = collections.Counter()
 
 			self.chromosome_barcode_dict[chromosome][position]['-'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['-primer1'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['-primer2'] = collections.Counter()
+			self.chromosome_barcode_dict[chromosome][position]['-primer1_mispriming'] = collections.Counter()
+			self.chromosome_barcode_dict[chromosome][position]['-primer2_mispriming'] = collections.Counter()
 			self.chromosome_barcode_dict[chromosome][position]['-nomatch'] = collections.Counter()
 
 		self.chromosome_barcode_dict[chromosome][position][strand][barcode] += count
@@ -80,6 +89,10 @@ class chromosomePosition():
 										  len(self.chromosome_barcode_dict[chromosome][position]['+primer2']),
 										  len(self.chromosome_barcode_dict[chromosome][position]['-primer1']),
 										  len(self.chromosome_barcode_dict[chromosome][position]['-primer2']),
+										  len(self.chromosome_barcode_dict[chromosome][position]['+primer1_mispriming']),
+										  len(self.chromosome_barcode_dict[chromosome][position]['+primer2_mispriming']),
+										  len(self.chromosome_barcode_dict[chromosome][position]['-primer1_mispriming']),
+										  len(self.chromosome_barcode_dict[chromosome][position]['-primer2_mispriming']),
 										  ]
 										 for chromosome in sorted(self.chromosome_barcode_dict)
 										 for position in sorted(self.chromosome_barcode_dict[chromosome])]
@@ -90,7 +103,8 @@ class chromosomePosition():
 		last_chromosome, last_position, window_index = 0, 0, 0
 		index_summary = []
 		for chromosome, position, barcode_plus_count, barcode_minus_count, total_plus_count, total_minus_count, plus_primer1_count, plus_primer2_count,\
-				minus_primer1_count, minus_primer2_count in self.barcode_position_summary:
+				minus_primer1_count, minus_primer2_count,\
+				plus_primer1_mispriming_count, plus_primer2_mispriming_count,minus_primer1_mispriming_count, minus_primer2_mispriming_count in self.barcode_position_summary:
 			if chromosome != last_chromosome or abs(position - last_position) > 10:
 				window_index += 1   # new index
 			last_chromosome, last_position = chromosome, position
@@ -102,15 +116,17 @@ class chromosomePosition():
 												   int(total_plus_count), int(total_minus_count),
 												   int(total_plus_count) + int(total_minus_count),
 												   int(plus_primer1_count), int(plus_primer2_count),
-												   int(minus_primer1_count), int(minus_primer2_count)
+												   int(minus_primer1_count), int(minus_primer2_count),
+												   int(plus_primer1_mispriming_count), int(plus_primer2_mispriming_count),
+												   int(minus_primer1_mispriming_count), int(minus_primer2_mispriming_count)
 												   ])
 		for index in self.index_stack:
 			sorted_list = sorted(self.index_stack[index], key=operator.itemgetter(4))   # sort by barcode_count_total
 			chromosome_list, position_list, \
 				barcode_plus_count_list, barcode_minus_count_list, barcode_sum_list,\
 				total_plus_count_list, total_minus_count_list, total_sum_list, \
-				plus_primer1_list, plus_primer2_list, minus_primer1_list, minus_primer2_list\
-				= zip(*sorted_list)
+				plus_primer1_list, plus_primer2_list, minus_primer1_list, minus_primer2_list,\
+				plus_primer1_mispriming_list, plus_primer2_mispriming_list, minus_primer1_mispriming_list, minus_primer2_mispriming_list = zip(*sorted_list)
 			barcode_plus = sum(barcode_plus_count_list)
 			barcode_minus = sum(barcode_minus_count_list)
 			total_plus = sum(total_plus_count_list)
@@ -119,6 +135,10 @@ class chromosomePosition():
 			plus_primer2 = sum(plus_primer2_list)
 			minus_primer1 = sum(minus_primer1_list)
 			minus_primer2 = sum(minus_primer2_list)
+			plus_primer1_mispriming = sum(plus_primer1_mispriming_list)
+			plus_primer2_mispriming = sum(plus_primer2_mispriming_list)
+			minus_primer1_mispriming = sum(minus_primer1_mispriming_list)
+			minus_primer2_mispriming = sum(minus_primer2_mispriming_list)
 			position_std = numpy.std(position_list)
 			min_position = min(position_list)
 			max_position = max(position_list)
@@ -128,6 +148,8 @@ class chromosomePosition():
 			total_geometric_mean = (total_plus * total_minus) ** 0.5
 			primer1 = plus_primer1 + minus_primer1
 			primer2 = plus_primer2 + minus_primer2
+			primer1_mispriming = plus_primer1_mispriming + minus_primer1_mispriming
+			primer2_mispriming = plus_primer2_mispriming + minus_primer2_mispriming
 			primer_geometric_mean = (primer1 * primer2) ** 0.5
 			most_frequent_chromosome = sorted_list[-1][0]
 			most_frequent_position = sorted_list[-1][1]
@@ -135,14 +157,15 @@ class chromosomePosition():
 				BED_format_chromosome = most_frequent_chromosome
 			else:
 				BED_format_chromosome = "chr" + most_frequent_chromosome
-			BED_name = BED_format_chromosome + "_" + str(most_frequent_position) + "_" + str(barcode_sum)
+			# BED_name = BED_format_chromosome + "_" + str(most_frequent_position) + "_" + str(barcode_sum)
+			BED_name = f"{BED_format_chromosome}:{min_position}-{max_position}"
 			offtarget_sequence = self.getSequence(self.genome, most_frequent_chromosome, most_frequent_position - windowsize, most_frequent_position + windowsize)
 
 			summary_list = [str(x) for x in [index, most_frequent_chromosome, most_frequent_position, offtarget_sequence,						# pick most frequently occurring chromosome and position
 											 BED_format_chromosome, min_position, max_position, BED_name,
 											 barcode_plus, barcode_minus, barcode_sum, barcode_geometric_mean,
 											 total_plus, total_minus, total_sum, total_geometric_mean,
-											 primer1, primer2, primer_geometric_mean, position_std]]
+											 primer1, primer2,primer1_mispriming,primer2_mispriming, primer_geometric_mean, position_std]]
 
 			if (barcode_geometric_mean > 0 or primer_geometric_mean > 0):
 				index_summary.append(summary_list)
@@ -245,6 +268,7 @@ def alignSequences(targetsite_sequence, window_sequence, max_score=7):
 
 	for aln_m in alignments_mm:
 		strand_m, alignment_type_m, match_m = aln_m
+		# print (aln_m)
 		if match_m != None:
 			mismatches, insertions, deletions = match_m.fuzzy_counts
 			if mismatches < lowest_mismatch:
@@ -296,7 +320,7 @@ def hamming_distance(s1, s2):
 """
 annotation is in the format:
 """
-def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, max_score, control_primer):
+def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, max_score, control_primer,myDict=None):
 
 	output_folder = os.path.dirname(outfile)
 	if not os.path.exists(output_folder):
@@ -316,11 +340,11 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 		if len(fields) >= 10:
 			# These are strings--need to be cast as ints for comparisons.
 			full_read_name, sam_flag, chromosome, position, mapq, cigar, name_of_mate, position_of_mate, template_length, read_sequence, read_quality = fields[:11]
-			if int(mapq) >= 50 and int(sam_flag) & 128 and not int(sam_flag) & 2048:
+			if int(mapq) >= myDict['mapq_threshold'] and int(sam_flag) & 128 and not int(sam_flag) & 2048:
 				# Second read in pair
 				barcode, count = parseReadName(full_read_name)
 				# print (read_sequence)
-				control_read = contain_control_primer(read_sequence, sam_flag, control_primer)
+				control_read = contain_control_primer(read_sequence, sam_flag, myDict)
 				# print (control_read)
 				if control_read in control_primer_count_dict:
 					control_primer_count_dict[control_read] += 1
@@ -330,14 +354,19 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 					control_primer_count += 1
 					
 				# todo, check barcode count
-				primer = assignPrimerstoReads(read_sequence, sam_flag)
+				primer,flag = assignPrimerstoReads(read_sequence, sam_flag,dsODN_dict=myDict)
+				if primer != "nomatch":
+					if flag:
+						total_dsODN += 1
+					else:
+						primer = primer+"_mispriming"
+
 				if primer in total_dsODN_count_dict:
 					total_dsODN_count_dict[primer] += 1
 				else:
 					total_dsODN_count_dict[primer] = 1
 				# print (primer)
-				if primer != "nomatch":
-					total_dsODN += 1
+
 				if int(template_length) < 0:  # Reverse read
 					read_position = int(position_of_mate) + abs(int(template_length)) - 1
 					strand = "-"
@@ -348,14 +377,15 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 					chromosome_position.addPositionBarcode(chromosome, read_position, strand, barcode, primer, count)
 
 	# Generate barcode position summary
-	stacked_summary = chromosome_position.SummarizeBarcodePositions()
-
+	stacked_summary = chromosome_position.SummarizeBarcodePositions() # this stacked summary is not used
+	if control_primer_count == 0:
+		control_primer_count = -1
 	with open(outfile, 'w') as f:
 		# Write header
 		print('#BED_Chromosome', 'BED_Min.Position', 'BED_Max.Position', 'BED_Name', 'Filename',
 			  'WindowIndex', 'WindowChromosome', 'Position', 'WindowSequence',
 			  '+.mi', '-.mi', 'bi.sum.mi', 'bi.geometric_mean.mi', '+.total', '-.total', 'total.sum', 'total.geometric_mean',
-			  'primer1.mi', 'primer2.mi', 'primer.geometric_mean', 'position.stdev',
+			  'primer1.mi', 'primer2.mi','primer1_mispriming.mi', 'primer2_mispriming.mi', 'primer.geometric_mean', 'position.stdev',
 			  'BED_Site_Name', 'BED_Score', 'BED_Site_Chromosome',
 			  'Site_SubstitutionsOnly.Sequence', 'Site_SubstitutionsOnly.NumSubstitutions',  # 24:25
 			  'Site_SubstitutionsOnly.Strand', 'Site_SubstitutionsOnly.Start', 'Site_SubstitutionsOnly.End',  # 26:28
@@ -380,7 +410,7 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 				offtarget_sequence_no_bulge, mismatches, chosen_alignment_strand_m, start_no_bulge, end_no_bulge, \
 				bulged_offtarget_sequence, length, distance, substitutions, insertions, deletions, chosen_alignment_strand_b, bulged_start, bulged_end, \
 				realigned_target_sequence = alignSequences(target_sequence, window_sequence, max_score)
-
+				# print (realigned_target_sequence,target_sequence, window_sequence, max_score)
 				BED_score = 1
 				BED_chromosome = window_chromosome
 				if chosen_alignment_strand_m == "+":
@@ -406,15 +436,15 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 				# print ("BED_name",BED_name)
 				# print ("annotation",annotation)
 				output_row = row[4:8] + [filename_tail] + row[0:4] + row[8:] + \
-							 [str(x) for x in BED_name, BED_score, BED_chromosome,
+							 [str(x) for x in [BED_name, BED_score, BED_chromosome,
 											  offtarget_sequence_no_bulge, mismatches, chosen_alignment_strand_m,
 											  non_bulged_target_start_absolute, non_bulged_target_end_absolute,
 											  bulged_offtarget_sequence, length, distance, substitutions, insertions, deletions,
-											  chosen_alignment_strand_b, bulged_target_start_absolute, bulged_target_end_absolute] + \
+											  chosen_alignment_strand_b, bulged_target_start_absolute, bulged_target_end_absolute]] + \
 							 [str(x) for x in annotation] + [realigned_target_sequence]
 			else:
 				output_row = [str(x) for x in row[4:8] + [filename_tail] + row[0:4] + row[8:] + [""] * 17 + annotation + ['none']]
-
+			# print (output_row)
 			if non_bulged_target_start_absolute != '' or bulged_target_start_absolute != '':
 				# print ("non_bulged_target_start_absolute",non_bulged_target_start_absolute)
 				# print ("bulged_target_start_absolute",bulged_target_start_absolute)
@@ -429,9 +459,9 @@ def analyze(sam_filename, reference_genome, outfile, annotations, windowsize, ma
 				output_dict[output_row_key][11] = str(read_count_total)
 			else:
 				output_dict[output_row_key] = output_row
-
 		for key in sorted(output_dict.keys()):
-			print(*output_dict[key]+[str(control_primer_count),str(total_dsODN),str(output_dict[key][11]/float(control_primer_count))], sep='\t', file=f)
+			print(*output_dict[key]+[str(control_primer_count),str(total_dsODN),str(float(output_dict[key][11])/float(control_primer_count))], sep='\t', file=f)
+
 
 def py2min(myList):
 	out = [i  for i in myList if i != "" ]
@@ -441,33 +471,55 @@ def py2max(myList):
 	out = [i  for i in myList if i != "" ]
 	return max(out)
 
-def assignPrimerstoReads(read_sequence, sam_flag):
+def assignPrimerstoReads(read_sequence, sam_flag,dsODN_dict=None):
 	# Get 20-nucleotide sequence from beginning or end of sequence depending on orientation
 	if int(sam_flag) & 16:
-		readstart = read_sequence[-20:]
+		read_sequence = reverseComplement(read_sequence)
+	# i7-
+	if match_dsODN(read_sequence,dsODN_dict['i7-'],dsODN_dict['i7-_match_distance']):
+		extend_sequence = read_sequence[len(dsODN_dict['i7-']):len(dsODN_dict['dsODN_primer'])][:dsODN_dict['i7-_mispriming_length']]
+		correct_sequence = dsODN_dict['dsODN_primer'][len(dsODN_dict['i7-']):len(dsODN_dict['dsODN_primer'])][:dsODN_dict['i7-_mispriming_length']]
+		# print (extend_sequence,correct_sequence)
+		if distance(extend_sequence,correct_sequence) >= dsODN_dict['i7-_mispriming_distance']:
+			return "primer1",False # misprimining
+		else:
+			return "primer1",True
+	if match_dsODN(read_sequence,dsODN_dict['i7+'],dsODN_dict['i7+_match_distance']):
+		extend_sequence = read_sequence[len(dsODN_dict['i7+']):len(dsODN_dict['dsODN_primer_revcomp'])][:dsODN_dict['i7+_mispriming_length']]
+		correct_sequence = dsODN_dict['dsODN_primer_revcomp'][len(dsODN_dict['i7+']):len(dsODN_dict['dsODN_primer_revcomp'])][:dsODN_dict['i7+_mispriming_length']]
+		# print ("i7+",extend_sequence,correct_sequence)
+		if distance(extend_sequence,correct_sequence) >= dsODN_dict['i7+_mispriming_distance']:
+			return "primer2",False # misprimining
+		else:
+			return "primer2",True
+	return "nomatch",False
+
+# i7+_mispriming_length: 12
+# i7-_mispriming_length: 5
+
+
+def match_dsODN(read_sequence,primer,cutoff):
+	myDistance = distance(read_sequence[:len(primer)],primer)
+	if myDistance <= cutoff:
+		return True
 	else:
-		readstart = read_sequence[:20]
-	if readstart == "GTTTAATTGAGTTGTCATAT":
-		return "primer1"
-	elif readstart == "ATATGACAACTCAATTAAAC":
-		return "primer2"
-	else:
+		return False
+
+
+
+def contain_control_primer(read_sequence, sam_flag,myDict=None):
+	control_primer = myDict['control_primer']
+	if control_primer == "":
 		return "nomatch"
-
-
-def contain_control_primer(read_sequence, sam_flag, control_primer):
 	# Get 20-nucleotide sequence from beginning or end of sequence depending on orientation
-	if control_primer == None:
-		return "nomatch"
 	if int(sam_flag) & 16:
-		# print (read_sequence[-len(control_primer):])
-		if hamming_distance(read_sequence[-len(control_primer):],control_primer)<=2:
+		read_sequence = reverseComplement(read_sequence)
+	myDistance = distance(read_sequence[:len(control_primer)],control_primer)
+	if myDistance <= myDict['control_primer_match_distance']:
+		if int(sam_flag) & 16:
 			return "control_rev"
-	else:
-		# print (read_sequence[:len(control_primer)])
-		if hamming_distance(read_sequence[:len(control_primer)],control_primer)<=2:
+		else:
 			return "control_fwd"
-
 	return "nomatch"
 
 def loadFileIntoArray(filename):

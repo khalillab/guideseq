@@ -72,26 +72,26 @@ def checkIfValidUndemultiplexed(undemultiplexed):
 
 def checkIfValidSamples(samples):
     # Check if control is one of the samples
-    if 'control' not in samples:
-        logger.error('A control sample must be specified')
-        sys.exit()
+    # if 'control' not in samples:
+        # logger.error('A control sample must be specified')
+        # sys.exit()
 
     if len(samples.keys()) == 0:
         logger.error('No samples defined')
         sys.exit()
 
-    for sample in samples:
-        if 'barcode1' not in samples[sample] or 'barcode2' not in samples[sample]:
-            logger.error('barcode1 and barcode2 must be specified for {0} sample'.format(sample))
-            sys.exit()
-        if 'target' not in samples[sample]:
-            logger.error('target sequence must be specified for {0} sample'.format(sample))
-            sys.exit()
+    # for sample in samples:
+        # if 'barcode1' not in samples[sample] or 'barcode2' not in samples[sample]:
+            # logger.error('barcode1 and barcode2 must be specified for {0} sample'.format(sample))
+            # sys.exit()
+        # if 'target' not in samples[sample]:
+            # logger.error('target sequence must be specified for {0} sample'.format(sample))
+            # sys.exit()
 
 
 def validateManifest(manifest_data):
     # Check if manifest contains the required fields
-    fields = ['bwa', 'bedtools', 'reference_genome', 'output_folder', 'samples', 'undemultiplexed']
+    fields = ['samples','reference_genome']
     missing_fields = False
 
     for field in fields:
@@ -106,5 +106,5 @@ def validateManifest(manifest_data):
     checkIfBinary(manifest_data['bwa'])
     checkIfBinary(manifest_data['bedtools'])
     checkIfFasta(manifest_data['reference_genome'])
-    checkIfValidUndemultiplexed(manifest_data['undemultiplexed'])
+    # checkIfValidUndemultiplexed(manifest_data['undemultiplexed'])
     checkIfValidSamples(manifest_data['samples'])
