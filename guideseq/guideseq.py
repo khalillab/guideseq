@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/Users/heinsz/opt/anaconda3/envs/guideseq/bin/python
 # -*- coding: utf-8 -*-
 """
 
@@ -26,7 +26,8 @@ import identifyOfftargetSites
 import validation
 
 DEFAULT_DEMULTIPLEX_MIN_READS = 10000
-DEFAULT_WINDOW_SIZE = 25
+#DEFAULT_WINDOW_SIZE = 25
+DEFAULT_WINDOW_SIZE = 30
 DEFAULT_MAX_SCORE = 7
 
 CONSOLIDATE_MIN_QUAL = 15
@@ -78,7 +79,7 @@ class GuideSeq:
         if 'PAM' in manifest_data:
             self.PAM = manifest_data['PAM']
         else:
-            self.PAM = "NGG"
+            self.PAM = "NNN"
 
         # Make sure the user has specified a control barcode
         if 'control' not in self.samples.keys():
@@ -287,10 +288,9 @@ class GuideSeq:
                     infile = self.identified[sample]
                     outfile = os.path.join(self.output_folder, 'visualization', sample + '_offtargets')
                     try:
-                        self.PAM
-                        visualizeOfftargets(infile, outfile, title=sample,PAM=self.PAM)
+                        visualizeOfftargets(infile, outfile, title=sample,PAMS=[self.PAM])
                     except:
-                        visualizeOfftargets(infile, outfile, title=sample,PAM="NGG")
+                        visualizeOfftargets(infile, outfile, title=sample,PAMS=["NNNNNN", "NNN"])
                 except Exception as e:
                     logger.error('Error visualizing off-target sites: %s'%(sample))
                     logger.error(traceback.format_exc())
